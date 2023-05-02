@@ -47,6 +47,7 @@ class LcdMancalaBoard:
     currentPlayer = 1
     playerCursorIndex = 0
     lastNotification = ""
+    gameOver = False
 
     def render(self):
         reversePlayer2Pits = self.player2Pits.copy()
@@ -186,15 +187,17 @@ class LcdMancalaBoard:
     def check_all_empty(self, player):
         if player == 1:
             return sum(self.player1Pits) == 0
-        return sum(self.player2Pits) == 0
-
-    def check_game_over(self):
-        if self.check_all_empty(1) or self.check_all_empty(2):
-            self.lcd_notification("Game over!")
-            time.sleep(2)
-            lcd.clear()
-            lcd.message = f"Game over!\nScore {self.player2Store} - {self.player1Store}\n\nPlayer {2 if self.player2Store > self.player1Store else 1} wins!"
-            sys.exit()
+        return sum(self.player2Pits) == 0   
+    
+    def end_game(self):
+        self.lcd_notification("Game over!")
+        for pit in range(6):
+            self.add_to_space(6, self.player1Pits[pit])
+            self.set_space_value(pit, 0)
+        for pit in range(6):
+            self.add_to_space(13, self.player2Pits[pit])
+            self.set_space_value(pit + 7, 0)
+        self.gameOver = True
 
     def lcd_notification(self, message: str):
         if len(message) > 16:
@@ -222,6 +225,8 @@ class LcdMancalaBoard:
         self.lcd_notification("")
 
         currentStones = self.get_space_value(pit)
+        if currentStones == 0:
+            return pit
         self.set_space_value(pit, 0)
 
         currentPitID = pit
@@ -267,19 +272,25 @@ class LcdMancalaBoard:
                     13, self.get_space_value(12 - currentPitID) + 1)
                 self.set_space_value(12 - currentPitID, 0)
 
-        self.check_game_over()
+        if self.check_all_empty(1) or self.check_all_empty(2):
+            self.end_game()
+            
         self.switch_player()
         return currentPitID
 
-
-board = LcdMancalaBoard()
-board.update_display()
 lcd.cursor = True
 lcd.blink = True
-
+board = LcdMancalaBoard()
+board.update_display()
+upButton.when_pressed = board.player_cursor_next
+downButton.when_pressed = board.player_cursor_prev
+cancelButton.when_pressed = board.end_game
+selectButton.when_pressed = lambda: board.move_from_pit(
+    board.currentPlayer, board.player_selected_id())
 while True:
-    upButton.when_pressed = board.player_cursor_next
-    downButton.when_pressed = board.player_cursor_prev
-    cancelButton.when_pressed = board.switch_player
-    selectButton.when_pressed = lambda: board.move_from_pit(
-        board.currentPlayer, board.player_selected_id())
+    if board.gameOver:
+        break
+time.sleep(2)
+lcd.clear()
+lcd.cursor_position(0, 0)
+lcd.message = f"Game over!\nScore {board.player2Store} - {board.player1Store}\n\nPlayer {2 if board.player2Store > board.player1Store else 1} wins!"
